@@ -705,10 +705,16 @@ impl LocalParticipant {
         let publication = self.remove_publication(sid);
         if let Some(TrackPublication::Local(publication)) = publication {
             let track = publication.track().unwrap();
-            let remove_result = {
-                let sender = track.transceiver().unwrap().sender();
-                self.inner.rtc_engine.remove_track(sender)
-            };
+            let transceiver = track.transceiver().unwrap();
+            let remove_result = self.inner.rtc_engine.remove_track(transceiver.sender());
+
+            // A transceiver that has ever sent keeps its send stream, and with
+            // it the encoder, in every later offer until it is stopped.
+            if remove_result.is_ok() {
+                if let Err(err) = transceiver.stop() {
+                    log::warn!("failed to stop the unpublished track's transceiver: {err:?}");
+                }
+            }
 
             // The peer connection may already be closed after a server-initiated
             // disconnect. Always release the local publication/track graph even
